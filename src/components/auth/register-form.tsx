@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useWorkspaceStore } from "@/store/workspace-store"
-import { registerAccount, SECURITY_QUESTIONS } from "@/store/auth-store"
+import { registerAccount } from "@/store/auth-store"
 import { cn } from "@/lib/utils"
 
 const ROLES = [
@@ -26,13 +26,12 @@ export function RegisterForm() {
   const [showPwd, setShowPwd] = useState(false)
   const [error, setError] = useState("")
   const [form, setForm] = useState({
-    fullName: "", email: "", company: "", role: "analyst",
-    password: "", securityQuestion: SECURITY_QUESTIONS[0], securityAnswer: "",
+    fullName: "", email: "", company: "", role: "analyst", password: "",
   })
 
-  const inviteCode    = searchParams?.get("invite") ?? null
-  const inviteName    = searchParams?.get("name") ?? ""
-  const inviteEmail   = searchParams?.get("email") ?? ""
+  const inviteCode  = searchParams?.get("invite") ?? null
+  const inviteName  = searchParams?.get("name") ?? ""
+  const inviteEmail = searchParams?.get("email") ?? ""
 
   useEffect(() => {
     init()
@@ -56,29 +55,22 @@ export function RegisterForm() {
     if (form.password.length < 8) {
       setError("La contraseña debe tener al menos 8 caracteres"); return
     }
-    if (!form.securityAnswer.trim()) {
-      setError("La respuesta de seguridad es obligatoria"); return
-    }
     setLoading(true)
 
-    // Register credentials in auth store
-    const authResult = registerAccount(
-      form.email, form.password, form.securityQuestion, form.securityAnswer
-    )
+    const authResult = await registerAccount(form.email, form.password)
     if (!authResult.ok) {
       setLoading(false)
       setError(authResult.error)
       return
     }
 
-    // Save profile
+    // Save profile locally until DB migration
     if (inviteCode) {
       setProfileFromInvite(form.fullName, form.email, form.company, inviteCode)
     } else {
       useWorkspaceStore.getState().createProfile(form.fullName, form.email, form.company)
     }
 
-    await new Promise(r => setTimeout(r, 600))
     setLoading(false)
     router.push("/dashboard")
   }
@@ -138,30 +130,6 @@ export function RegisterForm() {
               {showPwd ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
             </button>
           </div>
-        </div>
-      </div>
-
-      {/* Security question */}
-      <div className="border-t border-border pt-4 space-y-3">
-        <p className="text-xs font-medium text-muted-foreground">
-          Pregunta de seguridad — para recuperar tu contraseña si la olvidas
-        </p>
-        <div className="space-y-1.5">
-          <Label htmlFor="secQuestion">Pregunta</Label>
-          <select id="secQuestion" value={form.securityQuestion}
-            onChange={e => set("securityQuestion", e.target.value)}
-            className="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:border-ring transition-colors">
-            {SECURITY_QUESTIONS.map(q => <option key={q} value={q}>{q}</option>)}
-          </select>
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="secAnswer">Respuesta *</Label>
-          <Input id="secAnswer" placeholder="Tu respuesta..."
-            value={form.securityAnswer} onChange={e => set("securityAnswer", e.target.value)}
-            className="h-10" />
-          <p className="text-[11px] text-muted-foreground">
-            Recuérdala bien — la necesitarás si olvidas tu contraseña.
-          </p>
         </div>
       </div>
 

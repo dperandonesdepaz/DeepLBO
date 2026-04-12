@@ -21,9 +21,8 @@ export function LoginForm() {
     setError("")
     if (!form.email || !form.password) { setError("Completa todos los campos"); return }
     setLoading(true)
-    await new Promise(r => setTimeout(r, 500))
 
-    const result = loginAccount(form.email, form.password)
+    const result = await loginAccount(form.email, form.password)
     setLoading(false)
 
     if (!result.ok) {

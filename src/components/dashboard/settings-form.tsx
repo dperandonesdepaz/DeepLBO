@@ -5,7 +5,7 @@ import { toast } from "sonner"
 import { User, Lock, Bell, Trash2, Shield } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { useWorkspaceStore } from "@/store/workspace-store"
-import { loginAccount, resetPassword, logoutAccount } from "@/store/auth-store"
+import { updatePassword, logoutAccount } from "@/store/auth-store"
 
 const USER_ROLES = [
   { value: "analyst",  label: "Analista de PE/VC" },
@@ -69,7 +69,7 @@ export function SettingsForm() {
   const [notifications, setNotifications] = useState({
     weekly: true, updates: true, tips: false, security: true,
   })
-  const [pwd, setPwd] = useState({ current: "", next: "", confirm: "" })
+  const [pwd, setPwd] = useState({ next: "", confirm: "" })
   const [pwdError, setPwdError] = useState("")
 
   useEffect(() => {
@@ -132,11 +132,10 @@ export function SettingsForm() {
 
       {/* Security */}
       <Section icon={Lock} title="Seguridad" description="Gestiona tu contraseña y acceso">
+        <p className="text-xs text-muted-foreground -mt-2">
+          Para cambiar la contraseña, introduce la nueva dos veces. No necesitas la contraseña actual.
+        </p>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <Field label="Contraseña actual">
-            <Inp type="password" placeholder="••••••••"
-              value={pwd.current} onChange={v => { setPwd(p => ({ ...p, current: v })); setPwdError("") }} />
-          </Field>
           <Field label="Nueva contraseña" hint="Mínimo 8 caracteres">
             <Inp type="password" placeholder="••••••••"
               value={pwd.next} onChange={v => { setPwd(p => ({ ...p, next: v })); setPwdError("") }} />
@@ -149,17 +148,14 @@ export function SettingsForm() {
         {pwdError && <p className="text-xs text-destructive bg-destructive/8 rounded-lg px-3 py-2">{pwdError}</p>}
         <button
           type="button"
-          onClick={() => {
+          onClick={async () => {
             setPwdError("")
-            if (!pwd.current || !pwd.next || !pwd.confirm) { setPwdError("Completa todos los campos de contraseña"); return }
+            if (!pwd.next || !pwd.confirm) { setPwdError("Completa los campos de contraseña"); return }
             if (pwd.next.length < 8) { setPwdError("La nueva contraseña debe tener al menos 8 caracteres"); return }
             if (pwd.next !== pwd.confirm) { setPwdError("Las contraseñas no coinciden"); return }
-            const email = profile?.email ?? ""
-            const check = loginAccount(email, pwd.current)
-            if (!check.ok) { setPwdError("La contraseña actual es incorrecta"); return }
-            const result = resetPassword(email, pwd.next)
+            const result = await updatePassword(pwd.next)
             if (!result.ok) { setPwdError(result.error); return }
-            setPwd({ current: "", next: "", confirm: "" })
+            setPwd({ next: "", confirm: "" })
             toast.success("Contraseña actualizada correctamente")
           }}
           className="h-8 px-4 text-xs font-medium border border-border rounded-lg hover:bg-secondary transition-colors"

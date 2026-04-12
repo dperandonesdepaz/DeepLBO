@@ -141,7 +141,7 @@ export function DashboardNav() {
               <DropdownMenuSeparator />
               <DropdownMenuItem
                 className="text-destructive focus:text-destructive cursor-pointer"
-                onClick={() => { logoutAccount(); router.push("/") }}
+                onClick={async () => { await logoutAccount(); router.push("/") }}
               >
                 <LogOut className="w-3.5 h-3.5" /> Cerrar sesión
               </DropdownMenuItem>
