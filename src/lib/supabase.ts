@@ -1,12 +1,14 @@
 import { createBrowserClient } from '@supabase/ssr'
 import { createClient } from '@supabase/supabase-js'
 
-const url = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+// Fallback placeholders so the module never crashes during SSR / static build.
+// The real values come from NEXT_PUBLIC_* env vars at runtime in the browser.
+const url = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co'
+const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder-anon-key'
 
-// createBrowserClient stores the session in cookies so the proxy can read it.
-// During SSR / static build (Node.js, no DOM), fall back to createClient to avoid
-// "document is not defined" errors — auth is never used server-side anyway.
+// In the browser: createBrowserClient stores the session in cookies so the
+// server-side proxy can read it and protect routes.
+// In Node.js (SSR / build): plain createClient, no DOM needed.
 export const supabase =
   typeof window !== 'undefined'
     ? createBrowserClient(url, key)
