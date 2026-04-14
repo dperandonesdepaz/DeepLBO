@@ -47,35 +47,30 @@ export function CalculatorLayout({ analysisId }: Props) {
   }, [setActiveSection])
 
   useEffect(() => {
-    // 1. Always treat "demo" as the demo analysis
-    if (analysisId === "demo") {
-      loadDemo()
-      return
+    async function init() {
+      if (analysisId === "demo") { loadDemo(); return }
+
+      const found = await loadFromStorage(analysisId)
+      if (found) return
+
+      const meta = typeof window !== "undefined"
+        ? JSON.parse(sessionStorage.getItem(`deeplbo_newname_${analysisId}`) ?? "null") : null
+
+      const name   = meta?.name    ?? "Nuevo análisis"
+      const sector = meta?.sector  ?? ""
+      const tmpl   = meta?.template ?? "blank"
+
+      if (tmpl === "demo") {
+        const demoInputs = { ...DEFAULT_LBO_INPUTS, companyName: name, sector: sector || "Software / SaaS" }
+        loadAnalysis(analysisId, name, demoInputs)
+      } else if (tmpl === "custom" && meta?.templateInputs) {
+        const tplInputs = { ...meta.templateInputs, companyName: name, sector: sector || meta.templateInputs.sector }
+        loadAnalysis(analysisId, name, tplInputs)
+      } else {
+        loadBlank(analysisId, name)
+      }
     }
-
-    // 2. Try to load from localStorage (previously saved analysis)
-    const found = loadFromStorage(analysisId)
-    if (found) return
-
-    // 3. Brand new — check sessionStorage for creation params
-    const meta = typeof window !== "undefined"
-      ? JSON.parse(sessionStorage.getItem(`deeplbo_newname_${analysisId}`) ?? "null")
-      : null
-
-    const name    = meta?.name    ?? "Nuevo análisis"
-    const sector  = meta?.sector  ?? ""
-    const tmpl    = meta?.template ?? "blank"
-
-    if (tmpl === "demo") {
-      const demoInputs = { ...DEFAULT_LBO_INPUTS, companyName: name, sector: sector || "Software / SaaS" }
-      loadAnalysis(analysisId, name, demoInputs)
-    } else if (tmpl === "custom" && meta?.templateInputs) {
-      // User selected a custom template
-      const tplInputs = { ...meta.templateInputs, companyName: name, sector: sector || meta.templateInputs.sector }
-      loadAnalysis(analysisId, name, tplInputs)
-    } else {
-      loadBlank(analysisId, name)
-    }
+    init()
   }, [analysisId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Auto-save to localStorage 1.5s after any change

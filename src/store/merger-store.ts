@@ -3,6 +3,7 @@ import { subscribeWithSelector } from "zustand/middleware"
 import type { MergerInputs, MergerResults } from "@/types/ma"
 import { DEFAULT_MERGER_INPUTS } from "@/types/ma"
 import { computeMerger } from "@/lib/merger-engine"
+import { dbGetAllMerger, dbUpsertMerger, dbGetMerger, dbDeleteMerger } from "@/lib/db"
 
 const LS_KEY = "deeplbo_merger_analyses"
 
@@ -14,33 +15,53 @@ export interface SavedMerger {
   updatedAt: string
 }
 
-export function getAllMergerAnalyses(): SavedMerger[] {
+function loadFromLS(): SavedMerger[] {
   if (typeof window === "undefined") return []
-  try {
-    return JSON.parse(localStorage.getItem(LS_KEY) ?? "[]") as SavedMerger[]
-  } catch { return [] }
+  try { return JSON.parse(localStorage.getItem(LS_KEY) ?? "[]") as SavedMerger[] } catch { return [] }
 }
 
-export function saveMergerToLS(id: string, name: string, inputs: MergerInputs): void {
-  const all = getAllMergerAnalyses()
+function writeToLS(id: string, name: string, inputs: MergerInputs) {
+  const all = loadFromLS()
   const idx = all.findIndex(a => a.id === id)
   const now = new Date().toISOString()
-  if (idx >= 0) {
-    all[idx] = { ...all[idx], name, inputs, updatedAt: now }
-  } else {
-    all.push({ id, name, inputs, createdAt: now, updatedAt: now })
+  if (idx >= 0) all[idx] = { ...all[idx], name, inputs, updatedAt: now }
+  else all.push({ id, name, inputs, createdAt: now, updatedAt: now })
+  localStorage.setItem(LS_KEY, JSON.stringify(all))
+}
+
+// ─── Public helpers ───────────────────────────────────────────────────────────
+
+export async function getAllMergerAnalyses(): Promise<SavedMerger[]> {
+  try {
+    const rows = await dbGetAllMerger()
+    return rows.map(r => ({ id: r.id, name: r.name, inputs: r.inputs as MergerInputs, createdAt: r.createdAt, updatedAt: r.updatedAt }))
+  } catch {
+    return loadFromLS().sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
   }
-  localStorage.setItem(LS_KEY, JSON.stringify(all))
 }
 
-export function getMergerFromLS(id: string): SavedMerger | null {
-  return getAllMergerAnalyses().find(a => a.id === id) ?? null
+export function saveMergerToLS(id: string, name: string, inputs: MergerInputs) {
+  writeToLS(id, name, inputs)
+  dbUpsertMerger(id, name, inputs).catch(() => {})
 }
 
-export function deleteMergerFromLS(id: string): void {
-  const all = getAllMergerAnalyses().filter(a => a.id !== id)
+export async function deleteMergerFromLS(id: string) {
+  const all = loadFromLS().filter(a => a.id !== id)
   localStorage.setItem(LS_KEY, JSON.stringify(all))
+  await dbDeleteMerger(id).catch(() => {})
 }
+
+export async function getMergerFromLS(id: string): Promise<SavedMerger | null> {
+  const local = loadFromLS().find(a => a.id === id)
+  if (local) return local
+  try {
+    const remote = await dbGetMerger(id)
+    if (!remote) return null
+    return { id: remote.id, name: remote.name, inputs: remote.inputs as MergerInputs, createdAt: remote.createdAt, updatedAt: remote.updatedAt }
+  } catch { return null }
+}
+
+// ─── Store ────────────────────────────────────────────────────────────────────
 
 interface MergerStore {
   analysisId: string | null
@@ -62,7 +83,7 @@ interface MergerStore {
   loadBlank: (id: string, name: string) => void
   loadDemo: () => void
   loadAnalysis: (id: string, name: string, inputs: MergerInputs) => void
-  loadFromStorage: (id: string) => boolean
+  loadFromStorage: (id: string) => Promise<boolean>
   persistToStorage: () => void
 }
 
@@ -96,12 +117,7 @@ export const useMergerStore = create<MergerStore>()(
     }),
 
     loadDemo: () => {
-      const demo: MergerInputs = {
-        ...DEFAULT_MERGER_INPUTS,
-        dealName: "Fusión Demo: BigCo + TargetCo",
-        acquirerName: "BigCo España S.A.",
-        targetName: "TargetCo S.L.",
-      }
+      const demo: MergerInputs = { ...DEFAULT_MERGER_INPUTS, dealName: "Fusión Demo: BigCo + TargetCo", acquirerName: "BigCo España S.A.", targetName: "TargetCo S.L." }
       set({
         analysisId: 'merger-demo', analysisName: "BigCo / TargetCo (Demo)",
         inputs: demo, results: computeMerger(demo),
@@ -110,20 +126,17 @@ export const useMergerStore = create<MergerStore>()(
     },
 
     loadAnalysis: (id, name, inputs) => set({
-      analysisId: id, analysisName: name,
-      inputs, results: computeMerger(inputs),
-      isDemo: false, isDirty: false,
-      saveStatus: 'saved', activeSection: 'overview',
+      analysisId: id, analysisName: name, inputs, results: computeMerger(inputs),
+      isDemo: false, isDirty: false, saveStatus: 'saved', activeSection: 'overview',
     }),
 
-    loadFromStorage: (id) => {
-      const saved = getMergerFromLS(id)
+    loadFromStorage: async (id) => {
+      const saved = await getMergerFromLS(id)
       if (!saved) return false
       set({
         analysisId: id, analysisName: saved.name,
         inputs: saved.inputs, results: computeMerger(saved.inputs),
-        isDemo: false, isDirty: false,
-        saveStatus: 'saved', activeSection: 'overview',
+        isDemo: false, isDirty: false, saveStatus: 'saved', activeSection: 'overview',
       })
       return true
     },

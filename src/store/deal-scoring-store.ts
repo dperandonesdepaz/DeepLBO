@@ -2,6 +2,7 @@
 
 import { create } from "zustand"
 import { subscribeWithSelector } from "zustand/middleware"
+import { dbGetScore, dbSaveScore } from "@/lib/db"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 export interface ScoringCriterion {
@@ -114,6 +115,21 @@ export const useScoringStore = create<ScoringState>()(
       const score = existing ?? createDealScore(analysisId)
       const weightedAvg = computeWeightedScore(score.criteria)
       set({ score, weightedAvg })
+      // Sync from Supabase
+      dbGetScore(analysisId).then(remote => {
+        if (!remote) return
+        const remoteScore: DealScore = {
+          analysisId,
+          criteria: remote.criteria as ScoringCriterion[],
+          recommendation: remote.recommendation as DealScore['recommendation'],
+          summaryNotes: remote.summary_notes ?? "",
+          updatedAt: remote.updated_at,
+        }
+        const all = loadAll()
+        all[analysisId] = remoteScore
+        saveAll(all)
+        set({ score: remoteScore, weightedAvg: computeWeightedScore(remoteScore.criteria) })
+      }).catch(() => {})
     },
 
     updateCriterion(criterionId, updates) {
@@ -129,6 +145,7 @@ export const useScoringStore = create<ScoringState>()(
       all[score.analysisId] = updated
       saveAll(all)
       set({ score: updated, weightedAvg })
+      dbSaveScore(updated.analysisId, updated.criteria, updated.recommendation, updated.summaryNotes).catch(() => {})
     },
 
     updateNotes(summaryNotes) {
@@ -139,6 +156,7 @@ export const useScoringStore = create<ScoringState>()(
       all[score.analysisId] = updated
       saveAll(all)
       set({ score: updated })
+      dbSaveScore(updated.analysisId, updated.criteria, updated.recommendation, summaryNotes).catch(() => {})
     },
   }))
 )

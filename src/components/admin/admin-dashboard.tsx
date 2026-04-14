@@ -61,11 +61,17 @@ export function AdminDashboard() {
   const { workspace, profile, init } = useWorkspaceStore()
 
   useEffect(() => {
-    setLboList(getAllAnalyses())
-    setDcfList(getAllDCFAnalyses())
-    setMergerList(getAllMergerAnalyses())
-    seedDemoListings()
-    setHubListings(getAllListings())
+    async function load() {
+      const [lbo, dcf, merger] = await Promise.all([
+        getAllAnalyses(), getAllDCFAnalyses(), getAllMergerAnalyses(),
+      ])
+      setLboList(lbo)
+      setDcfList(dcf)
+      setMergerList(merger)
+      seedDemoListings()
+      setHubListings(getAllListings())
+    }
+    load()
     init()
   }, [init])
 

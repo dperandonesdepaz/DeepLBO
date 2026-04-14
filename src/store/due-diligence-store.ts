@@ -2,6 +2,7 @@
 
 import { create } from "zustand"
 import { subscribeWithSelector } from "zustand/middleware"
+import { dbGetDD, dbSaveDD } from "@/lib/db"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 export type DDStatus = "pending" | "in_progress" | "complete" | "flagged" | "na"
@@ -165,6 +166,17 @@ export const useDDStore = create<DDState>()(
       const existing = getDDChecklist(analysisId)
       const checklist = existing ?? createDDChecklist(analysisId, analysisName)
       set({ checklist })
+      // Also try to load from Supabase
+      dbGetDD(analysisId).then(remote => {
+        if (!remote) return
+        const remoteChecklist: DDChecklist = {
+          analysisId, analysisName: remote.analysis_name ?? analysisName,
+          items: remote.items as DDItem[],
+          createdAt: remote.created_at, updatedAt: remote.updated_at,
+        }
+        saveDDChecklist(remoteChecklist)
+        set({ checklist: remoteChecklist })
+      }).catch(() => {})
     },
 
     updateItem(itemId, updates) {
@@ -176,6 +188,7 @@ export const useDDStore = create<DDState>()(
       const updated = { ...checklist, items, updatedAt: new Date().toISOString() }
       set({ checklist: updated })
       saveDDChecklist(updated)
+      dbSaveDD(updated.analysisId, updated.analysisName, updated.items).catch(() => {})
     },
 
     resetItem(itemId) {

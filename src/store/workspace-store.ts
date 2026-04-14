@@ -1,5 +1,6 @@
 import { create } from "zustand"
 import { subscribeWithSelector } from "zustand/middleware"
+import { dbGetProfile, dbUpdateProfile, dbCreateWorkspace, dbGetMyWorkspace, dbGetWorkspaceByCode, dbJoinWorkspace, dbLeaveWorkspace, dbGetWorkspaceMembers } from "@/lib/db"
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -122,9 +123,26 @@ export const useWorkspaceStore = create<WorkspaceStore>()(
     loaded:    false,
 
     init: () => {
+      // Load from localStorage immediately (fast)
       const ws = getWorkspaceFromLS()
       const p  = getProfileFromLS()
       set({ workspace: ws, profile: p, loaded: true })
+      // Then sync from Supabase in background
+      dbGetProfile().then(remote => {
+        if (!remote) return
+        const profile: UserProfile = {
+          id: remote.id,
+          name: remote.name ?? "",
+          email: remote.email ?? "",
+          company: remote.company ?? "",
+          role: (remote.role as WorkspaceRole) ?? 'member',
+          workspaceId: remote.workspace_id ?? null,
+          workspaceName: null,
+          createdAt: remote.created_at,
+        }
+        saveProfileToLS(profile)
+        set({ profile })
+      }).catch(() => {})
     },
 
     createWorkspace: (name, description, ownerName, ownerEmail) => {
@@ -257,6 +275,8 @@ export const useWorkspaceStore = create<WorkspaceStore>()(
         }
       saveProfileToLS(profile)
       set({ profile })
+      // Sync to Supabase (profile created by trigger, update name/company)
+      dbUpdateProfile({ name, email, company }).catch(() => {})
     },
 
     updateProfile: (partial) => {
@@ -265,6 +285,7 @@ export const useWorkspaceStore = create<WorkspaceStore>()(
       const updated = { ...p, ...partial }
       saveProfileToLS(updated)
       set({ profile: updated })
+      dbUpdateProfile(partial as Record<string, string>).catch(() => {})
     },
 
     setProfileFromInvite: (name, email, company, inviteCode) => {

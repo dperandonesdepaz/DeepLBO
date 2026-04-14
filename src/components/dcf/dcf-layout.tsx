@@ -27,22 +27,21 @@ export function DCFLayout({ analysisId }: Props) {
   const { activeSection, loadDemo, loadBlank, loadFromStorage, loadAnalysis, persistToStorage, isDirty } = useDCFStore()
 
   useEffect(() => {
-    if (analysisId === "demo") { loadDemo(); return }
-    const found = loadFromStorage(analysisId)
-    if (found) return
-
-    const meta = typeof window !== "undefined"
-      ? JSON.parse(sessionStorage.getItem(`deeplbo_dcf_${analysisId}`) ?? "null")
-      : null
-
-    const name   = meta?.name   ?? "Nuevo DCF"
-    const sector = meta?.sector ?? ""
-
-    if (meta?.template === "demo") {
-      loadAnalysis(analysisId, name, { ...DEFAULT_DCF_INPUTS, companyName: name, sector })
-    } else {
-      loadBlank(analysisId, name)
+    async function init() {
+      if (analysisId === "demo") { loadDemo(); return }
+      const found = await loadFromStorage(analysisId)
+      if (found) return
+      const meta = typeof window !== "undefined"
+        ? JSON.parse(sessionStorage.getItem(`deeplbo_dcf_${analysisId}`) ?? "null") : null
+      const name   = meta?.name   ?? "Nuevo DCF"
+      const sector = meta?.sector ?? ""
+      if (meta?.template === "demo") {
+        loadAnalysis(analysisId, name, { ...DEFAULT_DCF_INPUTS, companyName: name, sector })
+      } else {
+        loadBlank(analysisId, name)
+      }
     }
+    init()
   }, [analysisId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {

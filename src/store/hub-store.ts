@@ -2,6 +2,7 @@
 
 import { create } from "zustand"
 import { subscribeWithSelector } from "zustand/middleware"
+import { dbGetHubListings, dbCreateHubListing, dbUpdateHubListing, dbDeleteHubListing, dbExpressInterest } from "@/lib/db"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 export type HubListingType = "sale" | "investment" | "merger" | "partnership"
@@ -63,7 +64,7 @@ export interface HubListing {
   closedAt?: string
 }
 
-// ─── localStorage helpers ─────────────────────────────────────────────────────
+// ─── localStorage helpers (cache) ────────────────────────────────────────────
 const LS_KEY = "deeplbo_hub_listings"
 
 function loadAll(): Record<string, HubListing> {
@@ -77,6 +78,7 @@ function saveAll(data: Record<string, HubListing>) {
 }
 
 function genId() {
+  if (typeof crypto !== "undefined" && crypto.randomUUID) return crypto.randomUUID()
   return `hub_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
 }
 
@@ -268,8 +270,42 @@ export const useHubStore = create<HubState>()(
     searchQuery: "",
 
     loadListings() {
+      // Load from localStorage immediately, then fetch from Supabase
       seedDemoListings()
       set({ listings: getAllListings() })
+      dbGetHubListings().then(rows => {
+        if (rows.length === 0) return
+        const mapped = rows.map((r: Record<string, unknown>) => ({
+          id: r.id as string,
+          title: r.title as string,
+          type: r.type as HubListingType,
+          sector: r.sector as HubSector,
+          country: r.country as string,
+          city: r.city as string | undefined,
+          revenueM: Number(r.revenue_m),
+          ebitdaM: Number(r.ebitda_m),
+          askingMultiple: r.asking_multiple ? Number(r.asking_multiple) : undefined,
+          askingPriceM: r.asking_price_m ? Number(r.asking_price_m) : undefined,
+          netDebtM: r.net_debt_m ? Number(r.net_debt_m) : undefined,
+          description: r.description as string,
+          highlights: (r.highlights as string[]) ?? [],
+          useOfFunds: r.use_of_funds as string | undefined,
+          dealRationale: r.deal_rationale as string | undefined,
+          anonymous: r.anonymous as boolean,
+          ownerName: r.owner_name as string | undefined,
+          ownerFirm: r.owner_firm as string | undefined,
+          ownerEmail: r.owner_email as string,
+          tags: (r.tags as string[]) ?? [],
+          status: r.status as HubListingStatus,
+          views: r.views as number,
+          isDemo: r.is_demo as boolean,
+          interests: [],
+          createdAt: r.created_at as string,
+          updatedAt: r.updated_at as string,
+          closedAt: r.closed_at as string | undefined,
+        })) as HubListing[]
+        set({ listings: mapped })
+      }).catch(() => {})
     },
 
     loadMyListings(ownerEmail) {
@@ -296,6 +332,18 @@ export const useHubStore = create<HubState>()(
       all[id] = listing
       saveAll(all)
       set({ listings: getAllListings() })
+      // Sync to Supabase
+      dbCreateHubListing({
+        id,
+        title: data.title, type: data.type, sector: data.sector,
+        country: data.country, city: data.city,
+        revenue_m: data.revenueM, ebitda_m: data.ebitdaM,
+        asking_multiple: data.askingMultiple, asking_price_m: data.askingPriceM, net_debt_m: data.netDebtM,
+        description: data.description, highlights: data.highlights,
+        use_of_funds: data.useOfFunds, deal_rationale: data.dealRationale,
+        anonymous: data.anonymous, owner_name: data.ownerName, owner_firm: data.ownerFirm, owner_email: data.ownerEmail,
+        tags: data.tags, status: "active", views: 0, is_demo: false,
+      }).catch(() => {})
       return id
     },
 
@@ -305,6 +353,7 @@ export const useHubStore = create<HubState>()(
       all[id] = { ...all[id], ...data, updatedAt: new Date().toISOString() }
       saveAll(all)
       set({ listings: getAllListings(), activeListing: all[id] })
+      dbUpdateHubListing(id, { status: data.status }).catch(() => {})
     },
 
     closeListing(id) {
@@ -316,6 +365,7 @@ export const useHubStore = create<HubState>()(
       delete all[id]
       saveAll(all)
       set({ listings: getAllListings() })
+      dbDeleteHubListing(id).catch(() => {})
     },
 
     expressInterest(listingId, contact) {
@@ -330,6 +380,7 @@ export const useHubStore = create<HubState>()(
       all[listingId].updatedAt = new Date().toISOString()
       saveAll(all)
       set({ activeListing: all[listingId] })
+      dbExpressInterest(listingId, contact).catch(() => {})
     },
 
     setFilter(filter) {

@@ -181,13 +181,14 @@ export function AnalysisList() {
   const [dcfList, setDcfList]       = useState<SavedDCF[]>([])
   const [mergerList, setMergerList] = useState<SavedMerger[]>([])
 
-  function refresh() {
-    setLboList(getAllAnalyses())
-    setDcfList(getAllDCFAnalyses())
-    setMergerList(getAllMergerAnalyses())
+  async function refresh() {
+    const [lbo, dcf, merger] = await Promise.all([getAllAnalyses(), getAllDCFAnalyses(), getAllMergerAnalyses()])
+    setLboList(lbo)
+    setDcfList(dcf)
+    setMergerList(merger)
   }
 
-  useEffect(() => { refresh() }, [])
+  useEffect(() => { refresh() }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const hasAny = lboList.length > 0 || dcfList.length > 0 || mergerList.length > 0
 
@@ -244,7 +245,7 @@ export function AnalysisList() {
                 <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60 mb-2">LBO</p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                   {lboList.map(a => (
-                    <LBOCard key={a.id} a={a} onDelete={() => { deleteAnalysisFromLS(a.id); refresh() }} />
+                    <LBOCard key={a.id} a={a} onDelete={() => { deleteAnalysisFromLS(a.id).then(() => refresh()) }} />
                   ))}
                 </div>
               </div>
@@ -254,7 +255,7 @@ export function AnalysisList() {
                 <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60 mb-2">DCF</p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                   {dcfList.map(a => (
-                    <DCFCard key={a.id} a={a} onDelete={() => { deleteDCFFromLS(a.id); refresh() }} />
+                    <DCFCard key={a.id} a={a} onDelete={() => { deleteDCFFromLS(a.id).then(() => refresh()) }} />
                   ))}
                 </div>
               </div>
@@ -264,7 +265,7 @@ export function AnalysisList() {
                 <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60 mb-2">FUSIONES</p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                   {mergerList.map(a => (
-                    <MergerCard key={a.id} a={a} onDelete={() => { deleteMergerFromLS(a.id); refresh() }} />
+                    <MergerCard key={a.id} a={a} onDelete={() => { deleteMergerFromLS(a.id).then(() => refresh()) }} />
                   ))}
                 </div>
               </div>

@@ -21,22 +21,23 @@ export function DashboardStats() {
   const [stats, setStats] = useState({ lbo: 0, dcf: 0, merger: 0, lastAccess: "—" })
 
   useEffect(() => {
-    const lboList    = getAllAnalyses()
-    const dcfList    = getAllDCFAnalyses()
-    const mergerList = getAllMergerAnalyses()
-
-    const allDates = [
-      ...lboList.map(a => a.updatedAt),
-      ...dcfList.map(a => a.updatedAt),
-      ...mergerList.map(a => a.updatedAt),
-    ].sort().reverse()
-
-    setStats({
-      lbo:    lboList.length,
-      dcf:    dcfList.length,
-      merger: mergerList.length,
-      lastAccess: allDates[0] ? timeAgo(allDates[0]) : "—",
-    })
+    async function load() {
+      const [lboList, dcfList, mergerList] = await Promise.all([
+        getAllAnalyses(), getAllDCFAnalyses(), getAllMergerAnalyses(),
+      ])
+      const allDates = [
+        ...lboList.map(a => a.updatedAt),
+        ...dcfList.map(a => a.updatedAt),
+        ...mergerList.map(a => a.updatedAt),
+      ].sort().reverse()
+      setStats({
+        lbo:    lboList.length,
+        dcf:    dcfList.length,
+        merger: mergerList.length,
+        lastAccess: allDates[0] ? timeAgo(allDates[0]) : "—",
+      })
+    }
+    load()
   }, [])
 
   return (

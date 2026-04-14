@@ -5,8 +5,9 @@ import { subscribeWithSelector } from "zustand/middleware"
 import type { LBOInputs, LBOResults } from "@/types/lbo"
 import { DEFAULT_LBO_INPUTS } from "@/types/lbo"
 import { computeLBO } from "@/lib/lbo-engine"
+import { dbGetAllLBO, dbUpsertLBO, dbGetLBO, dbDeleteLBO } from "@/lib/db"
 
-// ─── Blank inputs (new analysis, all zeros) ──────────────────────────────────
+// ─── Blank inputs ─────────────────────────────────────────────────────────────
 export const BLANK_LBO_INPUTS: LBOInputs = {
   companyName: '',
   sector: '',
@@ -31,7 +32,7 @@ export const BLANK_LBO_INPUTS: LBOInputs = {
   holdPeriod: 5,
 }
 
-// ─── localStorage helpers ────────────────────────────────────────────────────
+// ─── localStorage cache ───────────────────────────────────────────────────────
 const LS_KEY = "deeplbo_analyses"
 
 export interface SavedAnalysis {
@@ -43,50 +44,72 @@ export interface SavedAnalysis {
 
 function loadFromLS(): Record<string, SavedAnalysis> {
   if (typeof window === "undefined") return {}
-  try {
-    return JSON.parse(localStorage.getItem(LS_KEY) ?? "{}") ?? {}
-  } catch { return {} }
+  try { return JSON.parse(localStorage.getItem(LS_KEY) ?? "{}") ?? {} } catch { return {} }
 }
 
-export function getAllAnalyses(): SavedAnalysis[] {
-  return Object.values(loadFromLS()).sort(
-    (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
-  )
-}
-
-export function saveAnalysisToLS(id: string, name: string, inputs: LBOInputs) {
+function writeToLS(id: string, name: string, inputs: LBOInputs) {
   const all = loadFromLS()
   all[id] = { id, name, inputs, updatedAt: new Date().toISOString() }
   localStorage.setItem(LS_KEY, JSON.stringify(all))
 }
 
-export function deleteAnalysisFromLS(id: string) {
+function removeFromLS(id: string) {
   const all = loadFromLS()
   delete all[id]
   localStorage.setItem(LS_KEY, JSON.stringify(all))
 }
 
-export function getAnalysisFromLS(id: string): SavedAnalysis | null {
-  return loadFromLS()[id] ?? null
+// ─── Public helpers (used by components) ─────────────────────────────────────
+
+/** Async — reads from Supabase (source of truth) */
+export async function getAllAnalyses(): Promise<SavedAnalysis[]> {
+  try {
+    const rows = await dbGetAllLBO()
+    return rows.map(r => ({ id: r.id, name: r.name, inputs: r.inputs as LBOInputs, updatedAt: r.updatedAt }))
+  } catch {
+    // Fallback to localStorage if not authenticated
+    return Object.values(loadFromLS()).sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+  }
 }
 
-// ─── Compute helper — returns null if inputs are blank ───────────────────────
+/** Write to LS immediately + sync to Supabase in background */
+export function saveAnalysisToLS(id: string, name: string, inputs: LBOInputs) {
+  writeToLS(id, name, inputs)
+  dbUpsertLBO(id, name, inputs).catch(() => {/* offline — LS has it */})
+}
+
+/** Delete from LS + Supabase */
+export async function deleteAnalysisFromLS(id: string) {
+  removeFromLS(id)
+  await dbDeleteLBO(id).catch(() => {})
+}
+
+/** LS-first, then Supabase fallback */
+export async function getAnalysisFromLS(id: string): Promise<SavedAnalysis | null> {
+  const local = loadFromLS()[id]
+  if (local) return local
+  try {
+    const remote = await dbGetLBO(id)
+    if (!remote) return null
+    return { id: remote.id, name: remote.name, inputs: remote.inputs as LBOInputs, updatedAt: remote.updatedAt }
+  } catch { return null }
+}
+
+// ─── Compute helper ───────────────────────────────────────────────────────────
 function safeCompute(inputs: LBOInputs): LBOResults | null {
   if (inputs.revenue === 0 && inputs.ebitda === 0) return null
   return computeLBO(inputs)
 }
 
-// ─── Store ───────────────────────────────────────────────────────────────────
+// ─── Store ────────────────────────────────────────────────────────────────────
 type SaveStatus = "saved" | "saving" | "unsaved" | "error"
 
 interface AnalysisState {
   analysisId: string | null
   analysisName: string
   isDemo: boolean
-
   inputs: LBOInputs
   results: LBOResults | null
-
   activeSection: string
   saveStatus: SaveStatus
   lastSavedAt: Date | null
@@ -101,11 +124,10 @@ interface AnalysisState {
   setSaveStatus: (status: SaveStatus) => void
   setLastSavedAt: (date: Date) => void
 
-  // Load modes
   loadAnalysis: (id: string, name: string, inputs: LBOInputs) => void
   loadBlank: (id: string, name: string) => void
   loadDemo: () => void
-  loadFromStorage: (id: string) => boolean  // returns true if found
+  loadFromStorage: (id: string) => Promise<boolean>
 
   persistToStorage: () => void
   resetInputs: () => void
@@ -165,7 +187,7 @@ export const useAnalysisStore = create<AnalysisState>()(
         results: null,
         isDirty: false, saveStatus: "saved",
         lastSavedAt: null, isDemo: false,
-        activeSection: "company",  // start on company section for blank
+        activeSection: "company",
       })
     },
 
@@ -180,8 +202,8 @@ export const useAnalysisStore = create<AnalysisState>()(
       })
     },
 
-    loadFromStorage: (id) => {
-      const saved = getAnalysisFromLS(id)
+    loadFromStorage: async (id) => {
+      const saved = await getAnalysisFromLS(id)
       if (!saved) return false
       set({
         analysisId: id, analysisName: saved.name,
@@ -201,16 +223,11 @@ export const useAnalysisStore = create<AnalysisState>()(
     },
 
     resetInputs: () => {
-      set({
-        inputs: { ...BLANK_LBO_INPUTS },
-        results: null,
-        isDirty: true, saveStatus: "unsaved",
-      })
+      set({ inputs: { ...BLANK_LBO_INPUTS }, results: null, isDirty: true, saveStatus: "unsaved" })
     },
 
     recompute: () => {
-      const { inputs } = get()
-      set({ results: safeCompute(inputs) })
+      set({ results: safeCompute(get().inputs) })
     },
   }))
 )

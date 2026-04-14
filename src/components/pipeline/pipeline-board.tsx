@@ -224,7 +224,7 @@ export function PipelineBoard() {
 
   useEffect(() => {
     init()
-    setAnalyses(getAllAnalyses())
+    getAllAnalyses().then(setAnalyses)
   }, [init])
 
   const analysesMap: Record<string, SavedAnalysis> = {}

@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useWorkspaceStore } from "@/store/workspace-store"
 import { registerAccount } from "@/store/auth-store"
+import { dbUpdateProfile } from "@/lib/db"
 import { cn } from "@/lib/utils"
 
 const ROLES = [
@@ -64,7 +65,10 @@ export function RegisterForm() {
       return
     }
 
-    // Save profile locally until DB migration
+    // Update Supabase profile (trigger created it with just email)
+    dbUpdateProfile({ name: form.fullName, email: form.email, company: form.company }).catch(() => {})
+
+    // Save profile locally
     if (inviteCode) {
       setProfileFromInvite(form.fullName, form.email, form.company, inviteCode)
     } else {

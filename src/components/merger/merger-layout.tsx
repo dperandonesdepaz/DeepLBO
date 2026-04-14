@@ -26,20 +26,20 @@ export function MergerLayout({ analysisId }: Props) {
   const { activeSection, loadDemo, loadBlank, loadFromStorage, persistToStorage, isDirty } = useMergerStore()
 
   useEffect(() => {
-    if (analysisId === "merger-demo") { loadDemo(); return }
-    const found = loadFromStorage(analysisId)
-    if (found) return
-
-    const meta = typeof window !== "undefined"
-      ? JSON.parse(sessionStorage.getItem(`deeplbo_merger_${analysisId}`) ?? "null")
-      : null
-
-    const name = meta?.name ?? "Nueva Fusión"
-    if (meta?.template === "demo") {
-      useMergerStore.getState().loadDemo()
-    } else {
-      loadBlank(analysisId, name)
+    async function init() {
+      if (analysisId === "merger-demo") { loadDemo(); return }
+      const found = await loadFromStorage(analysisId)
+      if (found) return
+      const meta = typeof window !== "undefined"
+        ? JSON.parse(sessionStorage.getItem(`deeplbo_merger_${analysisId}`) ?? "null") : null
+      const name = meta?.name ?? "Nueva Fusión"
+      if (meta?.template === "demo") {
+        useMergerStore.getState().loadDemo()
+      } else {
+        loadBlank(analysisId, name)
+      }
     }
+    init()
   }, [analysisId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {

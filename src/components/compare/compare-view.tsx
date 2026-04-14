@@ -63,7 +63,7 @@ export function CompareView() {
   const [selected, setSelected] = useState<string[]>([])
   const [showPicker, setShowPicker] = useState(false)
 
-  useEffect(() => { setAllAnalyses(getAllAnalyses()) }, [])
+  useEffect(() => { getAllAnalyses().then(setAllAnalyses) }, [])
 
   const selectedData: AnalysisWithResults[] = selected
     .map(id => {
