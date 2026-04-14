@@ -21,7 +21,7 @@ export default function TerminosPage() {
           </Link>
           <nav className="flex items-center gap-4 text-sm text-muted-foreground">
             <Link href="/privacidad" className="hover:text-foreground transition-colors">Política de privacidad</Link>
-            <Link href="/hub" className="hover:text-foreground transition-colors">Deal Hub</Link>
+            <Link href="/login" className="hover:text-foreground transition-colors">Iniciar sesión</Link>
           </nav>
         </div>
       </header>

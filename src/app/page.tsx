@@ -153,7 +153,7 @@ export default function LandingPage() {
                   IRR/MOIC con distribuciones intermedias, WACC completo (CAPM), EV→Equity bridge,
                   análisis de apalancamiento y Accretion/Dilution express — todo en herramientas instantáneas.
                 </p>
-                <Link href="/dashboard/tools" className={cn(buttonVariants(), "gap-2")}>
+                <Link href="/login" className={cn(buttonVariants(), "gap-2")}>
                   Abrir herramientas <ArrowRight className="w-4 h-4" />
                 </Link>
               </div>
